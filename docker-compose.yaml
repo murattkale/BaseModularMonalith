@@ -1,0 +1,68 @@
+services:
+  api:
+    build: .
+    ports:
+      - "5000:8080"
+
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - DOTNET_RunningInContainer=true
+      - ConnectionStrings__DefaultConnection=Server=sql_db;Database=HighPerfDb;User Id=sa;Password=YourStrongPassword123!;TrustServerCertificate=True;
+      - ConnectionStrings__ReadConnection=Server=sql_db;Database=HighPerfDb;User Id=sa;Password=YourStrongPassword123!;TrustServerCertificate=True;
+    depends_on:
+      sql_db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+
+  sql_db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=YourStrongPassword123!
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P YourStrongPassword123! -Q 'SELECT 1' || exit 1" ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  mssql_data:
+  grafana_data:

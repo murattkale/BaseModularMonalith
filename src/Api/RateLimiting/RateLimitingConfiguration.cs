@@ -1,0 +1,88 @@
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Api.RateLimiting;
+
+/// <summary>
+/// Yüksek trafik senaryoları için rate limiting yapılandırması.
+/// In-memory fixed/sliding window limiter kullanır (hafif, harici bağımlılık yok).
+/// </summary>
+public static class RateLimitingConfiguration
+{
+    /// <summary>
+    /// Varsayılan policy (anonim kullanıcılar için).
+    /// </summary>
+    public const string DefaultPolicy = "default";
+    
+    /// <summary>
+    /// Kimlik doğrulanmış kullanıcılar için policy.
+    /// </summary>
+    public const string AuthenticatedPolicy = "authenticated";
+
+    /// <summary>
+    /// Rate limiting policy'lerini servislere ekler.
+    /// </summary>
+    public static IServiceCollection AddRateLimitingPolicies(this IServiceCollection services)
+    {
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = 429;
+            
+            options.OnRejected = async (context, token) =>
+            {
+                context.HttpContext.Response.ContentType = "application/json";
+                
+                if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                {
+                    context.HttpContext.Response.Headers.RetryAfter = retryAfter.TotalSeconds.ToString("0");
+                }
+
+                await context.HttpContext.Response.WriteAsJsonAsync(new SharedKernel.ApiError(
+                    Code: "RateLimitExceeded",
+                    Message: "Çok fazla istek gönderildi. Lütfen daha sonra tekrar deneyin."
+                ), token);
+            };
+
+            // Anonim kullanıcılar için - Maksimum performans için limitler 10 Milyon'a çıkarıldı
+            options.AddFixedWindowLimiter(DefaultPolicy, limiterOptions =>
+            {
+                limiterOptions.PermitLimit = 10_000_000;
+                limiterOptions.Window = TimeSpan.FromMinutes(1);
+                limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                limiterOptions.QueueLimit = 0; // Performans için kuyruk yok
+            });
+
+            // Kimlik doğrulanmış kullanıcılar için - Saniyede 10 Milyon isteğe kadar izin verir
+            options.AddTokenBucketLimiter(AuthenticatedPolicy, limiterOptions =>
+            {
+                limiterOptions.TokenLimit = 10_000_000;
+                limiterOptions.TokensPerPeriod = 10_000_000;
+                limiterOptions.ReplenishmentPeriod = TimeSpan.FromSeconds(1);
+                limiterOptions.QueueLimit = 0;
+            });
+
+            // Global limiter - sliding window (IP bazlı) - Maksimum seviyeye çekildi
+            options.GlobalLimiter = PartitionedRateLimiter.Create<Microsoft.AspNetCore.Http.HttpContext, string>(context =>
+            {
+                // Reverse proxy arkasında doğru IP için X-Forwarded-For kullan
+                var forwardedFor = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+                var clientIp = !string.IsNullOrEmpty(forwardedFor) 
+                    ? forwardedFor.Split(',')[0].Trim() 
+                    : context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                
+                return RateLimitPartition.GetSlidingWindowLimiter(
+                    partitionKey: clientIp,
+                    factory: _ => new SlidingWindowRateLimiterOptions
+                    {
+                        PermitLimit = 10_000_000,
+                        Window = TimeSpan.FromMinutes(1),
+                        SegmentsPerWindow = 6, // 10 saniyelik segmentler
+                        QueueLimit = 0
+                    });
+            });
+        });
+
+        return services;
+    }
+}
