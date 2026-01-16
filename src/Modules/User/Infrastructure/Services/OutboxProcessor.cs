@@ -37,32 +37,31 @@ public sealed class OutboxProcessor : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            int processedCount = 0;
             try
             {
-                await ProcessMessagesAsync(stoppingToken);
+                processedCount = await ProcessMessagesAsync(stoppingToken);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Outbox işlenirken beklenmedik hata oluştu.");
             }
 
-            // High-scale için bekleme süresi yapılandırılabilir
-            var interval = _configuration.GetValue<int>("Workers:OutboxPollingIntervalSeconds", 2);
-            await Task.Delay(TimeSpan.FromSeconds(interval), stoppingToken);
+            // Eğer batch tam doluysa (hala mesaj olma ihtimali yüksek), beklemeden devam et.
+            // Aksi halde yapılandırılan süre kadar bekle.
+            if (processedCount < BatchSize)
+            {
+                var interval = _configuration.GetValue<int>("Workers:OutboxPollingIntervalSeconds", 2);
+                await Task.Delay(TimeSpan.FromSeconds(interval), stoppingToken);
+            }
         }
     }
 
-    private async Task ProcessMessagesAsync(CancellationToken ct)
+    private async Task<int> ProcessMessagesAsync(CancellationToken ct)
     {
+        int processedCount = 0;
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<UserDbContext>();
-
-        // Atomic "Claim" mechanism using SQL Server OUTPUT clause
-        // This prevents multiple replicas from processing the same messages.
-        // We select messages where ProcessedAtUtc is null AND update their ProcessedAtUtc to a "lock" value.
-        // For simplicity here, we mark them as processed with a very old date or a specific Lock ID if we had one.
-        // Better: Use a dedicated 'ProcessingLockedUntil' column.
-        // For now, we'll use a transaction with RowLock and SkipLocked for high-concurrency efficiency.
         
         var strategy = dbContext.Database.CreateExecutionStrategy();
         await strategy.ExecuteAsync(async () =>
@@ -80,7 +79,8 @@ public sealed class OutboxProcessor : BackgroundService
                         ORDER BY CreatedAtUtc", new Microsoft.Data.SqlClient.SqlParameter("@p0", BatchSize))
                     .ToListAsync(ct);
 
-                if (messages.Count == 0) return;
+                processedCount = messages.Count;
+                if (processedCount == 0) return;
 
                 foreach (var message in messages)
                 {
@@ -123,5 +123,7 @@ public sealed class OutboxProcessor : BackgroundService
                 throw;
             }
         });
+
+        return processedCount;
     }
 }
