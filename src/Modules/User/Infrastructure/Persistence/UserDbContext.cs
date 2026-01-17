@@ -199,10 +199,17 @@ public sealed class UserDbContext : DbContext, IUnitOfWork
         var hashPart = span[..colonIndex];
         var saltPart = span[(colonIndex + 1)..];
  
-        // Convert.FromBase64String char span kabul eder, gereksiz string allocation'dan kaçılır
-        return HashedPassword.FromStorage(
-            Convert.FromBase64String(hashPart.ToString()),
-            Convert.FromBase64String(saltPart.ToString()));
+        // Span-based allocation-free parsing
+        byte[] hash = new byte[32]; // Argon2id hash size
+        byte[] salt = new byte[16]; // Salt size
+
+        if (!Convert.TryFromBase64Chars(hashPart, hash, out _))
+            throw new FormatException("Invalid hash base64.");
+            
+        if (!Convert.TryFromBase64Chars(saltPart, salt, out _))
+            throw new FormatException("Invalid salt base64.");
+
+        return HashedPassword.FromStorage(hash, salt);
     }
 
     private Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? _currentTransaction;
