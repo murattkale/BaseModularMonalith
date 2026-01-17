@@ -15,11 +15,11 @@ public sealed class UserDbContext : DbContext, IUnitOfWork
     // Compiled queries - EF Core query compilation overhead'ını ortadan kaldırır
     private static readonly Func<UserDbContext, Guid, CancellationToken, Task<UserEntity?>> GetByIdCompiledQuery =
         EF.CompileAsyncQuery((UserDbContext ctx, Guid id, CancellationToken ct) =>
-            ctx.Users.AsTracking().FirstOrDefault(u => u.Id == id));
+            ctx.Users.FirstOrDefault(u => u.Id == id));
 
     private static readonly Func<UserDbContext, Email, CancellationToken, Task<UserEntity?>> GetByEmailCompiledQuery =
         EF.CompileAsyncQuery((UserDbContext ctx, Email email, CancellationToken ct) =>
-            ctx.Users.AsTracking().FirstOrDefault(u => u.Email == email));
+            ctx.Users.FirstOrDefault(u => u.Email == email));
 
     private static readonly Func<UserDbContext, Guid, CancellationToken, Task<bool>> RequestIdExistsQuery =
         EF.CompileAsyncQuery((UserDbContext ctx, Guid requestId, CancellationToken ct) =>

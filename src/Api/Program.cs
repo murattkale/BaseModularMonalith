@@ -246,12 +246,12 @@ builder.Services.AddMediatR(cfg =>
     // Tüm modül assembly'lerini kayıt et
     cfg.RegisterServicesFromAssembly(typeof(User.Application.Commands.CreateUserCommand).Assembly);
     
-    // Pipeline sırası: Logging -> Validation -> Idempotency -> Transaction -> Audit -> Handler
-    // IMPORTANT: Idempotency MUST be BEFORE Transaction so the record is created in same TX
+    // Pipeline sırası: Logging -> Validation -> Transaction -> Idempotency -> Audit -> Handler
+    // IMPORTANT: Transaction MUST be BEFORE Idempotency so the idempotency record is committed in the same TX
     cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
     cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
-    cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(IdempotencyBehavior<,>));
     cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(TransactionBehavior<,>));
+    cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(IdempotencyBehavior<,>));
     cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(AuditLoggingBehavior<,>));
 });
 
@@ -291,6 +291,10 @@ var app = builder.Build();
 // =============================================================================
 // MIDDLEWARE PIPELINE
 // =============================================================================
+
+// Exception Handling - EN BAŞTA OLMALI
+app.UseMiddleware<GlobalExceptionMiddleware>();
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseHsts();
@@ -325,7 +329,7 @@ app.UseMiddleware<Api.Middlewares.SecurityHeadersMiddleware>();
         app.UseAntiforgery(); // Antiforgery middleware eklendi
         
         app.UseMiddleware<SecurityAuditMiddleware>();
-        app.UseMiddleware<GlobalExceptionMiddleware>();
+        // GlobalExceptionMiddleware moved to top
         app.UseMiddleware<ServerTimingMiddleware>();
 
         // Response compression

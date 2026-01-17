@@ -33,11 +33,30 @@ public sealed class JwtTokenGenerator : IJwtTokenGenerator
         _audience = jwtSection["Audience"] ?? "BaseModularMonolith";
         _expirationMinutes = int.TryParse(jwtSection["ExpirationMinutes"], out var exp) ? exp : 60;
 
-        var secretKey = jwtSection["SecretKey"] 
-            ?? throw new InvalidOperationException("JWT SecretKey not configured.");
+        // RSA support
+        var publicKeyPath = jwtSection["PublicKeyPath"];
+        var privateKeyPath = jwtSection["PrivateKeyPath"]; // Private key sadece token üretmek için gereklidir (Auth sunucusu)
+        
+        // PRODUCTION: RSA Private Key ile imzala
+        if (!string.IsNullOrEmpty(privateKeyPath) && File.Exists(privateKeyPath))
+        {
+             var rsa = System.Security.Cryptography.RSA.Create();
+             rsa.ImportFromPem(File.ReadAllText(privateKeyPath));
+             _signingCredentials = new SigningCredentials(new RsaSecurityKey(rsa), SecurityAlgorithms.RsaSha256);
+        }
+        else 
+        {
+            // DEVELOPMENT: Simetrik anahtar fallback (veya otomatik RSA üretimi yapılabilir)
+            // Not: Production'da kesinlikle RSA kullanılmalı.
+            var secretKey = jwtSection["SecretKey"] 
+                ?? throw new InvalidOperationException("JWT SecretKey or PrivateKeyPath not configured.");
 
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
-        _signingCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+            
+            // Eğer config'de RS256 isteniyorsa ama key yoksa hata fırlatılabilir veya HMAC ile devam edilir.
+            // Burada HMAC-SHA256 ile devam ediyoruz.
+            _signingCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+        }
     }
 
     public string GenerateToken(Guid userId, string email, string fullName, long roles)

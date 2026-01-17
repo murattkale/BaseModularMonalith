@@ -40,9 +40,11 @@ public sealed class SecurityHeadersMiddleware
             "font-src 'self'; " +
             "style-src 'self' 'unsafe-inline'; " +
             "script-src 'self' 'unsafe-inline'; " + // 'unsafe-inline' for swagger/dev usually needed
-            "frame-ancestors 'none'; " +
-            "clean-site-data \"cache\";"
+            "frame-ancestors 'none';"
         );
+
+        // 5.1 Clear-Site-Data
+        context.Response.Headers.Append("Clear-Site-Data", "\"cache\"");
 
         // 6. Referrer Policy: Control how much referrer info is sent
         context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");

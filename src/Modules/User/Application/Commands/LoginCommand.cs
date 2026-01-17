@@ -70,7 +70,8 @@ public sealed class LoginCommandHandler : ICommandHandler<LoginCommand, LoginRes
 
         // Login kaydet
         user.RecordLogin();
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _repository.Update(user);
+        // SaveChanges TransactionBehavior tarafından yönetilir
 
         _metrics.LoginSuccess();
 

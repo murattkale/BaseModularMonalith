@@ -114,6 +114,8 @@ public sealed class OutboxProcessor : BackgroundService
                 }
 
                 await dbContext.SaveChangesAsync(ct);
+                // Memory leak prevention: Change tracker'ı temizle
+                dbContext.ChangeTracker.Clear();
                 await transaction.CommitAsync(ct);
             }
             catch (Exception ex)

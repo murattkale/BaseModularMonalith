@@ -63,6 +63,17 @@ namespace User.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_IdempotentRequests_CreatedAt",
+                table: "IdempotentRequests",
+                column: "CreatedAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_OutboxMessages_Processing",
+                table: "OutboxMessages",
+                columns: new[] { "ProcessedAtUtc", "CreatedAtUtc" },
+                filter: "[ProcessedAtUtc] IS NULL");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Users_CreatedAt",
                 table: "Users",
                 column: "CreatedAt");
@@ -80,17 +91,23 @@ namespace User.Infrastructure.Persistence.Migrations
                 filter: "[DeletedAt] IS NULL");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Users_IsActive_CreatedAt",
+                name: "IX_Users_IsActive_CreatedAt_Id",
                 table: "Users",
-                columns: new[] { "IsActive", "CreatedAt" },
-                descending: new[] { false, true },
-                filter: "[DeletedAt] IS NULL");
+                columns: new[] { "IsActive", "CreatedAt", "Id" },
+                descending: new[] { false, true, true },
+                filter: "[DeletedAt] IS NULL")
+                .Annotation("SqlServer:Include", new[] { "Email", "FirstName", "LastName", "Roles", "LastLoginAt" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_LastLoginAt",
                 table: "Users",
                 column: "LastLoginAt",
                 filter: "[DeletedAt] IS NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_RowVersion",
+                table: "Users",
+                column: "RowVersion");
         }
 
         /// <inheritdoc />

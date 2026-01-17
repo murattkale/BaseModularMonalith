@@ -12,8 +12,8 @@ using User.Infrastructure.Persistence;
 namespace User.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(UserDbContext))]
-    [Migration("20260115154030_AddCoveringIndex")]
-    partial class AddCoveringIndex
+    [Migration("20260117102918_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -40,7 +40,10 @@ namespace User.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("IdempotentRequests");
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_IdempotentRequests_CreatedAt");
+
+                    b.ToTable("IdempotentRequests", (string)null);
                 });
 
             modelBuilder.Entity("SharedKernel.OutboxMessage", b =>
@@ -68,7 +71,11 @@ namespace User.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("OutboxMessages");
+                    b.HasIndex("ProcessedAtUtc", "CreatedAtUtc")
+                        .HasDatabaseName("IX_OutboxMessages_Processing")
+                        .HasFilter("[ProcessedAtUtc] IS NULL");
+
+                    b.ToTable("OutboxMessages", (string)null);
                 });
 
             modelBuilder.Entity("User.Domain.Entities.UserEntity", b =>
@@ -142,12 +149,15 @@ namespace User.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_Users_LastLoginAt")
                         .HasFilter("[DeletedAt] IS NULL");
 
-                    b.HasIndex("IsActive", "CreatedAt")
-                        .IsDescending(false, true)
-                        .HasDatabaseName("IX_Users_IsActive_CreatedAt")
+                    b.HasIndex("RowVersion")
+                        .HasDatabaseName("IX_Users_RowVersion");
+
+                    b.HasIndex("IsActive", "CreatedAt", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("IX_Users_IsActive_CreatedAt_Id")
                         .HasFilter("[DeletedAt] IS NULL");
 
-                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("IsActive", "CreatedAt"), new[] { "Email", "FirstName", "LastName", "Roles", "LastLoginAt" });
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("IsActive", "CreatedAt", "Id"), new[] { "Email", "FirstName", "LastName", "Roles", "LastLoginAt" });
 
                     b.ToTable("Users", (string)null);
                 });

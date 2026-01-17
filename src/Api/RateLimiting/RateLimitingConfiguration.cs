@@ -44,22 +44,22 @@ public static class RateLimitingConfiguration
                 ), token);
             };
 
-            // Anonim kullanıcılar için - Maksimum performans için limitler 10 Milyon'a çıkarıldı
-            options.AddFixedWindowLimiter(DefaultPolicy, limiterOptions =>
-            {
-                limiterOptions.PermitLimit = 10_000_000;
-                limiterOptions.Window = TimeSpan.FromMinutes(1);
-                limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-                limiterOptions.QueueLimit = 0; // Performans için kuyruk yok
-            });
+                // Anonim kullanıcılar için - Dakikada 60 istek
+                options.AddFixedWindowLimiter(DefaultPolicy, limiterOptions =>
+                {
+                    limiterOptions.PermitLimit = 60;
+                    limiterOptions.Window = TimeSpan.FromMinutes(1);
+                    limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                    limiterOptions.QueueLimit = 2;
+                });
 
-            // Kimlik doğrulanmış kullanıcılar için - Saniyede 10 Milyon isteğe kadar izin verir
+            // Kimlik doğrulanmış kullanıcılar için - Saniyede 10 / Dakikada 600 istek
             options.AddTokenBucketLimiter(AuthenticatedPolicy, limiterOptions =>
             {
-                limiterOptions.TokenLimit = 10_000_000;
-                limiterOptions.TokensPerPeriod = 10_000_000;
+                limiterOptions.TokenLimit = 600;
+                limiterOptions.TokensPerPeriod = 10;
                 limiterOptions.ReplenishmentPeriod = TimeSpan.FromSeconds(1);
-                limiterOptions.QueueLimit = 0;
+                limiterOptions.QueueLimit = 10;
             });
 
             // Global limiter - sliding window (IP bazlı) - Maksimum seviyeye çekildi
@@ -75,7 +75,7 @@ public static class RateLimitingConfiguration
                     partitionKey: clientIp,
                     factory: _ => new SlidingWindowRateLimiterOptions
                     {
-                        PermitLimit = 10_000_000,
+                        PermitLimit = 1000,
                         Window = TimeSpan.FromMinutes(1),
                         SegmentsPerWindow = 6, // 10 saniyelik segmentler
                         QueueLimit = 0
