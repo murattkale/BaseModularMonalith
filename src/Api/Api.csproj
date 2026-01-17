@@ -39,4 +39,10 @@
     <ProjectReference Include="..\BuildingBlocks\BuildingBlocks.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <_ContentIncludedByDefault Remove="logs\log-20260115.json" />
+    <_ContentIncludedByDefault Remove="logs\log-20260116.json" />
+    <_ContentIncludedByDefault Remove="logs\log-20260117.json" />
+  </ItemGroup>
+
 </Project>

@@ -27,7 +27,7 @@ public interface IUnitOfWork
     Task<T> ExecuteStrategyAsync<T>(Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Değişiklikleri geri alır.
+    /// Değişiklikleri geri alır (Rollback).
     /// </summary>
     Task RollbackTransactionAsync(CancellationToken cancellationToken = default);
 }

@@ -9,24 +9,35 @@ using User.Application.Queries;
 namespace User.Infrastructure.Persistence;
 
 /// <summary>
-/// Ultra high-performance User read service.
-/// Native ADO.NET pooling kullanır (çift havuzlama maliyeti kaldırıldı).
+/// Yüksek performanslı kullanıcı okuma servisi (User Read Service).
+/// Doğrudan ADO.NET ve Dapper kullanarak, EF Core overhead'ini atlar.
+/// Optimization: Native Connection Pooling ve NOLOCK kullanımı.
 /// </summary>
 public sealed class UserReadService : IUserReadService
 {
     private readonly string _connectionString;
 
+    /// <summary>
+    /// Ham SQL sorguları (Hardcoded for performance optimization - No string interpolation overhead).
+    /// </summary>
     private static class Sql
     {
+        // Temel alan seçimi
         public const string GetById = "SELECT Id, Email, FirstName, LastName, IsActive, Roles, CreatedAt, LastLoginAt FROM Users WITH (NOLOCK) WHERE Id = @Id AND DeletedAt IS NULL";
         public const string GetByEmail = "SELECT Id, Email, FirstName, LastName, IsActive, Roles, CreatedAt, LastLoginAt FROM Users WITH (NOLOCK) WHERE Email = @Email AND DeletedAt IS NULL";
         public const string GetAllBase = "SELECT Id, Email, CONCAT(FirstName, ' ', LastName) AS FullName, IsActive, Roles, CreatedAt, LastLoginAt FROM Users WITH (NOLOCK) WHERE DeletedAt IS NULL";
+        
+        // Pagination sorguları
         public const string GetAllActiveOnly = GetAllBase + " AND IsActive = 1 ORDER BY CreatedAt DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
         public const string GetAllInactiveOnly = GetAllBase + " AND IsActive = 0 ORDER BY CreatedAt DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
         public const string GetAllRaw = GetAllBase + " ORDER BY CreatedAt DESC OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
+        
+        // Count sorguları (Hızlı sayım)
         public const string GetCountActive = "SELECT COUNT(1) FROM Users WITH (NOLOCK) WHERE DeletedAt IS NULL AND IsActive = 1";
         public const string GetCountInactive = "SELECT COUNT(1) FROM Users WITH (NOLOCK) WHERE DeletedAt IS NULL AND IsActive = 0";
         public const string GetCountRaw = "SELECT COUNT(1) FROM Users WITH (NOLOCK) WHERE DeletedAt IS NULL";
+        
+        // Varlık kontrolü (Exists - 1/0 döner, en hızlı yöntem)
         public const string EmailExists = "SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM Users WITH (NOLOCK) WHERE Email = @Email AND DeletedAt IS NULL) THEN 1 ELSE 0 END AS BIT)";
     }
 
@@ -40,6 +51,9 @@ public sealed class UserReadService : IUserReadService
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private SqlConnection CreateConnection() => new(_connectionString);
 
+    /// <summary>
+    /// ID'ye göre kullanıcı detaylarını getirir (NOLOCK ile kilitlenmeden).
+    /// </summary>
     public async ValueTask<UserDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await BuildingBlocks.Resilience.ResiliencePipelines.DbPipeline.ExecuteAsync(async ct =>
@@ -55,6 +69,9 @@ public sealed class UserReadService : IUserReadService
         }, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Email adresine göre kullanıcı detaylarını getirir.
+    /// </summary>
     public async ValueTask<UserDto?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
         return await BuildingBlocks.Resilience.ResiliencePipelines.DbPipeline.ExecuteAsync(async ct =>
@@ -148,6 +165,10 @@ public sealed class UserReadService : IUserReadService
         }, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Verilen email adresinin kullanımda olup olmadığını kontrol eder.
+    /// Exists sorgusu ile sadece true/false döner, veri çekmez (Network I/O tasarrufu).
+    /// </summary>
     public async ValueTask<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default)
     {
         return await BuildingBlocks.Resilience.ResiliencePipelines.DbPipeline.ExecuteAsync(async ct =>
